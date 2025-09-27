@@ -57,6 +57,12 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        // Node colors for concept mapping
+        "node-concept": "hsl(var(--node-concept))",
+        "node-definition": "hsl(var(--node-definition))",
+        "node-example": "hsl(var(--node-example))",
+        "node-formula": "hsl(var(--node-formula))",
+        "node-question": "hsl(var(--node-question))",
       },
       borderRadius: {
         lg: "var(--radius)",

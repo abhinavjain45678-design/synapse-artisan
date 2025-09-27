@@ -112,6 +112,15 @@ export const ConceptMapCanvas = ({
   const [historyIndex, setHistoryIndex] = useState(-1);
   const reactFlowRef = useRef<any>(null);
 
+  const saveToHistory = useCallback(() => {
+    setHistory(prev => {
+      const newHistory = prev.slice(0, historyIndex + 1);
+      newHistory.push({ nodes: [...nodes], edges: [...edges] });
+      return newHistory.slice(-20); // Keep last 20 states
+    });
+    setHistoryIndex(prev => Math.min(prev + 1, 19));
+  }, [nodes, edges, historyIndex]);
+
   const onConnect = useCallback(
     (params: Connection) => {
       const newEdge = {
@@ -127,8 +136,9 @@ export const ConceptMapCanvas = ({
         },
       };
       setEdges((eds) => addEdge(newEdge, eds));
+      saveToHistory();
     },
-    [setEdges]
+    [setEdges, saveToHistory]
   );
 
   const onNodeClick = useCallback(
@@ -138,14 +148,20 @@ export const ConceptMapCanvas = ({
     [onNodeSelect]
   );
 
-  const saveToHistory = useCallback(() => {
-    setHistory(prev => {
-      const newHistory = prev.slice(0, historyIndex + 1);
-      newHistory.push({ nodes: [...nodes], edges: [...edges] });
-      return newHistory.slice(-20); // Keep last 20 states
-    });
-    setHistoryIndex(prev => Math.min(prev + 1, 19));
-  }, [nodes, edges, historyIndex]);
+  // Initialize history with current state
+  useEffect(() => {
+    if (history.length === 0) {
+      setHistory([{ nodes, edges }]);
+      setHistoryIndex(0);
+    }
+  }, []);
+
+  // Auto-save when changes occur
+  useEffect(() => {
+    if (history.length > 0) {
+      onSave?.(nodes, edges);
+    }
+  }, [nodes, edges, onSave]);
 
   const addNode = useCallback(
     (type: string, shape: string, color: string) => {
@@ -254,14 +270,29 @@ export const ConceptMapCanvas = ({
     );
     
     if (matchingNodes.length > 0) {
-      // Focus on first matching node
+      // Focus on first matching node and select it
+      const firstNode = matchingNodes[0];
       if (reactFlowRef.current) {
-        const firstNode = matchingNodes[0];
         reactFlowRef.current.setCenter(firstNode.position.x, firstNode.position.y, { zoom: 1.5, duration: 800 });
-        onNodeSelect?.(firstNode);
       }
+      onNodeSelect?.(firstNode);
+      
+      // Visual feedback - flash the matching nodes
+      setNodes(prevNodes => 
+        prevNodes.map(node => ({
+          ...node,
+          selected: matchingNodes.some(match => match.id === node.id)
+        }))
+      );
+      
+      // Clear selection after 3 seconds
+      setTimeout(() => {
+        setNodes(prevNodes => 
+          prevNodes.map(node => ({ ...node, selected: false }))
+        );
+      }, 3000);
     }
-  }, [nodes, onNodeSelect]);
+  }, [nodes, onNodeSelect, setNodes]);
 
   const onPaneClick = useCallback(() => {
     onNodeSelect?.(null);

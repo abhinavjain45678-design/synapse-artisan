@@ -111,7 +111,7 @@ export const Sidebar = ({ onAddNode, onLoadTemplate, selectedNode, onUpdateNode 
                       <div className="text-left">
                         <div className="font-medium">{type.label}</div>
                       </div>
-                      <div className={`ml-auto w-3 h-3 rounded-full ${type.color}`} />
+                      <div className={`ml-auto w-3 h-3 rounded-full bg-${type.color}`} />
                     </Button>
                   );
                 })}
