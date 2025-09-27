@@ -57,6 +57,12 @@ export const Sidebar = ({ onAddNode, onLoadTemplate, selectedNode, onUpdateNode 
   const [selectedNodeType, setSelectedNodeType] = useState("concept");
   const [selectedShape, setSelectedShape] = useState("circle");
 
+  const handleSearch = () => {
+    if (searchTerm.trim() && (window as any).conceptMapMethods) {
+      (window as any).conceptMapMethods.searchNodes(searchTerm);
+    }
+  };
+
   const handleAddNode = () => {
     const nodeType = nodeTypes.find(t => t.type === selectedNodeType);
     if (onAddNode && nodeType) {
@@ -73,6 +79,7 @@ export const Sidebar = ({ onAddNode, onLoadTemplate, selectedNode, onUpdateNode 
             placeholder="Search nodes..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
             className="pl-10"
           />
         </div>

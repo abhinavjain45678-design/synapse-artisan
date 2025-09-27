@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef } from 'react';
+import { useCallback, useState, useRef, useEffect } from 'react';
 import ReactFlow, {
   MiniMap,
   Controls,
@@ -107,6 +107,9 @@ export const ConceptMapCanvas = ({
   const [nodes, setNodes, onNodesChange] = useNodesState(propInitialNodes || initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(propInitialEdges || initialEdges);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [showGrid, setShowGrid] = useState(true);
+  const [history, setHistory] = useState<{ nodes: Node[], edges: Edge[] }[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
   const reactFlowRef = useRef<any>(null);
 
   const onConnect = useCallback(
@@ -135,6 +138,15 @@ export const ConceptMapCanvas = ({
     [onNodeSelect]
   );
 
+  const saveToHistory = useCallback(() => {
+    setHistory(prev => {
+      const newHistory = prev.slice(0, historyIndex + 1);
+      newHistory.push({ nodes: [...nodes], edges: [...edges] });
+      return newHistory.slice(-20); // Keep last 20 states
+    });
+    setHistoryIndex(prev => Math.min(prev + 1, 19));
+  }, [nodes, edges, historyIndex]);
+
   const addNode = useCallback(
     (type: string, shape: string, color: string) => {
       const newNode: Node = {
@@ -154,8 +166,9 @@ export const ConceptMapCanvas = ({
       };
 
       setNodes((nds) => nds.concat(newNode));
+      saveToHistory();
     },
-    [setNodes]
+    [setNodes, saveToHistory]
   );
 
   const updateNode = useCallback(
@@ -167,17 +180,116 @@ export const ConceptMapCanvas = ({
             : node
         )
       );
+      saveToHistory();
     },
-    [setNodes]
+    [setNodes, saveToHistory]
   );
+
+  const undo = useCallback(() => {
+    if (historyIndex > 0) {
+      const prevState = history[historyIndex - 1];
+      setNodes(prevState.nodes);
+      setEdges(prevState.edges);
+      setHistoryIndex(prev => prev - 1);
+    }
+  }, [history, historyIndex, setNodes, setEdges]);
+
+  const redo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      const nextState = history[historyIndex + 1];
+      setNodes(nextState.nodes);
+      setEdges(nextState.edges);
+      setHistoryIndex(prev => prev + 1);
+    }
+  }, [history, historyIndex, setNodes, setEdges]);
+
+  const zoomIn = useCallback(() => {
+    reactFlowRef.current?.zoomIn();
+  }, []);
+
+  const zoomOut = useCallback(() => {
+    reactFlowRef.current?.zoomOut();
+  }, []);
+
+  const toggleGrid = useCallback(() => {
+    setShowGrid(prev => !prev);
+  }, []);
+
+  const exportImage = useCallback(async () => {
+    try {
+      const html2canvas = await import('html2canvas');
+      if (reactFlowRef.current && html2canvas.default) {
+        const canvas = await html2canvas.default(reactFlowRef.current.querySelector('.react-flow__viewport'));
+        const dataUrl = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = 'concept-map.png';
+        link.href = dataUrl;
+        link.click();
+      }
+    } catch (error) {
+      console.error('Export failed:', error);
+    }
+  }, []);
 
   const handleSave = useCallback(() => {
     onSave?.(nodes, edges);
   }, [nodes, edges, onSave]);
 
+  const deleteNode = useCallback((nodeId: string) => {
+    setNodes((nds) => nds.filter((node) => node.id !== nodeId));
+    setEdges((eds) => eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
+    saveToHistory();
+  }, [setNodes, setEdges, saveToHistory]);
+
+  const loadTemplate = useCallback((template: { nodes: Node[], edges: Edge[] }) => {
+    setNodes(template.nodes);
+    setEdges(template.edges);
+    saveToHistory();
+  }, [setNodes, setEdges, saveToHistory]);
+
+  const searchNodes = useCallback((searchTerm: string) => {
+    const matchingNodes = nodes.filter(node => 
+      node.data.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      node.data.description?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    
+    if (matchingNodes.length > 0) {
+      // Focus on first matching node
+      if (reactFlowRef.current) {
+        const firstNode = matchingNodes[0];
+        reactFlowRef.current.setCenter(firstNode.position.x, firstNode.position.y, { zoom: 1.5, duration: 800 });
+        onNodeSelect?.(firstNode);
+      }
+    }
+  }, [nodes, onNodeSelect]);
+
   const onPaneClick = useCallback(() => {
     onNodeSelect?.(null);
   }, [onNodeSelect]);
+
+  // Event listeners for node actions
+  useEffect(() => {
+    const handleNodeEdit = (event: CustomEvent) => {
+      const { id, data } = event.detail;
+      const node = nodes.find(n => n.id === id);
+      if (node) {
+        onNodeSelect?.(node);
+      }
+    };
+
+    const handleNodeDelete = (event: CustomEvent) => {
+      const { id } = event.detail;
+      deleteNode(id);
+    };
+
+    window.addEventListener('nodeEdit', handleNodeEdit as EventListener);
+    window.addEventListener('nodeDelete', handleNodeDelete as EventListener);
+
+    return () => {
+      window.removeEventListener('nodeEdit', handleNodeEdit as EventListener);
+      window.removeEventListener('nodeDelete', handleNodeDelete as EventListener);
+    };
+  }, [nodes, onNodeSelect, deleteNode]);
 
   return (
     <div className="flex-1 relative">
@@ -203,11 +315,13 @@ export const ConceptMapCanvas = ({
             return `hsl(var(--${color.replace('node-', '')}))`;
           }}
         />
-        <Background 
-          gap={20} 
-          size={1}
-          color="hsl(var(--muted-foreground))"
-        />
+        {showGrid && (
+          <Background 
+            gap={20} 
+            size={1}
+            color="hsl(var(--muted-foreground))"
+          />
+        )}
       </ReactFlow>
 
       {/* Floating Stats */}
@@ -236,13 +350,20 @@ export const ConceptMapCanvas = ({
       <div style={{ display: 'none' }}>
         {(() => {
           // Expose methods to parent through refs or props
-          if (onNodeSelect) {
-            (window as any).conceptMapMethods = {
-              addNode,
-              updateNode,
-              handleSave,
-            };
-          }
+          (window as any).conceptMapMethods = {
+            addNode,
+            updateNode,
+            deleteNode,
+            loadTemplate,
+            searchNodes,
+            handleSave,
+            undo,
+            redo,
+            zoomIn,
+            zoomOut,
+            toggleGrid,
+            exportImage,
+          };
           return null;
         })()}
       </div>

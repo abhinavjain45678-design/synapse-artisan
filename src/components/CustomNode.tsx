@@ -32,6 +32,18 @@ export const CustomNode = memo(({ data, selected, id }: NodeProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const Icon = typeIcons[data.type as keyof typeof typeIcons] || BookOpen;
 
+  const handleEdit = () => {
+    // Trigger parent selection for editing
+    const event = new CustomEvent('nodeEdit', { detail: { id, data } });
+    window.dispatchEvent(event);
+  };
+
+  const handleDelete = () => {
+    // Trigger node deletion
+    const event = new CustomEvent('nodeDelete', { detail: { id } });
+    window.dispatchEvent(event);
+  };
+
   const getShapeClasses = () => {
     const baseClasses = "transition-all duration-300 border-2";
     const shapeClasses = {
@@ -103,11 +115,11 @@ export const CustomNode = memo(({ data, selected, id }: NodeProps) => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-40">
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={handleEdit}>
                   <Edit3 className="h-4 w-4 mr-2" />
                   Edit
                 </DropdownMenuItem>
-                <DropdownMenuItem className="text-destructive">
+                <DropdownMenuItem onClick={handleDelete} className="text-destructive">
                   <Trash2 className="h-4 w-4 mr-2" />
                   Delete
                 </DropdownMenuItem>
